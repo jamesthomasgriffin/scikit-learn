@@ -9,100 +9,41 @@ import numpy as np
 
 from scipy import linalg
 
-from .base import BaseMixture, _check_shape
-from .gaussian_mixture import _check_weights
+from .base import _check_shape
+from .base_simplicial import BaseSimplicialMixture
+from .gaussian_mixture import _check_weights, _check_precisions
+# _check_precision_positivity, _check_precision_matrix, _check_precisions_full
 from ..externals.six.moves import zip
 from ..utils import check_array
 from ..utils.validation import check_is_fitted
 from ..utils.extmath import row_norms
 
+###############################################################################
 # This differs from _check_means from .gaussian_mixture, in that the
 # number of means is not equal to the number of components (which is equiv
-# to the number of simplices)
+# to the number of simplices).  Functionally it is identical.
+
 def _check_means(means, n_vertices, n_features):
     """Validate the provided 'means'.
 
     Parameters
     ----------
-    means : array-like, shape (n_components, n_features)
-        The centers of the current components.
+    means : array-like, shape (n_vertices, n_features)
+        The positions of the current vertices.
 
-    n_components : int
-        Number of components.
+    n_vertices : int
+        Number of vertices.
 
     n_features : int
         Number of features.
 
     Returns
     -------
-    means : array, (n_components, n_features)
+    means : array, (n_vertices, n_features)
     """
     means = check_array(means, dtype=[np.float64, np.float32], ensure_2d=False)
-    _check_shape(means, (n_components, n_features), 'means')
+    _check_shape(means, (n_vertices, n_features), 'means')
     return means
-
-
-def _check_precision_positivity(precision, covariance_type):
-    """Check a precision vector is positive-definite."""
-    if np.any(np.less_equal(precision, 0.0)):
-        raise ValueError("'%s precision' should be "
-                         "positive" % covariance_type)
-
-
-def _check_precision_matrix(precision, covariance_type):
-    """Check a precision matrix is symmetric and positive-definite."""
-    if not (np.allclose(precision, precision.T) and
-            np.all(linalg.eigvalsh(precision) > 0.)):
-        raise ValueError("'%s precision' should be symmetric, "
-                         "positive-definite" % covariance_type)
-
-
-def _check_precisions_full(precisions, covariance_type):
-    """Check the precision matrices are symmetric and positive-definite."""
-    for k, prec in enumerate(precisions):
-        prec = _check_precision_matrix(prec, covariance_type)
-
-
-def _check_precisions(precisions, covariance_type, n_components, n_features):
-    """Validate user provided precisions.
-
-    Parameters
-    ----------
-    precisions : array-like,
-        'full' : shape of (n_components, n_features, n_features)
-        'tied' : shape of (n_features, n_features)
-        'diag' : shape of (n_components, n_features)
-        'spherical' : shape of (n_components,)
-
-    covariance_type : string
-
-    n_components : int
-        Number of components.
-
-    n_features : int
-        Number of features.
-
-    Returns
-    -------
-    precisions : array
-    """
-    precisions = check_array(precisions, dtype=[np.float64, np.float32],
-                             ensure_2d=False,
-                             allow_nd=covariance_type == 'full')
-
-    precisions_shape = {'full': (n_components, n_features, n_features),
-                        'tied': (n_features, n_features),
-                        'diag': (n_components, n_features),
-                        'spherical': (n_components,)}
-    _check_shape(precisions, precisions_shape[covariance_type],
-                 '%s precision' % covariance_type)
-
-    _check_precisions = {'full': _check_precisions_full,
-                         'tied': _check_precision_matrix,
-                         'diag': _check_precision_positivity,
-                         'spherical': _check_precision_positivity}
-    _check_precisions[covariance_type](precisions, covariance_type)
-    return precisions
 
 
 ###############################################################################
@@ -400,21 +341,25 @@ def _estimate_log_gaussian_prob(X, means, precisions_chol, covariance_type):
     return -.5 * (n_features * np.log(2 * np.pi) + log_prob) + log_det
 
 
-class GaussianMixture(BaseMixture):
-    """Gaussian Mixture.
+class SimplicialGaussianMixture(BaseMixture):
+    """Simplicial Gaussian Mixture.
 
-    Representation of a Gaussian mixture model probability distribution.
-    This class allows to estimate the parameters of a Gaussian mixture
+    Representation of a simplicial Gaussian mixture model probability
     distribution.
+    This class allows to estimate the parameters of a simplicial Gaussian
+    mixture distribution.
 
     Read more in the :ref:`User Guide <gmm>`.
 
-    .. versionadded:: 0.18
+    .. versionadded:: 0.??
 
     Parameters
     ----------
-    n_components : int, defaults to 1.
-        The number of mixture components.
+
+    similicial_complex : a subset of the power set of {1, ..., n_vertices}
+
+    n_vertices : int
+        The number of vertices of the simplicial complex
 
     covariance_type : {'full', 'tied', 'diag', 'spherical'},
             defaults to 'full'.
@@ -452,7 +397,7 @@ class GaussianMixture(BaseMixture):
         The user-provided initial weights, defaults to None.
         If it None, weights are initialized using the `init_params` method.
 
-    means_init : array-like, shape (n_components, n_features), optional
+    means_init : array-like, shape (n_vertices, n_features), optional
         The user-provided initial means, defaults to None,
         If it None, means are initialized using the `init_params` method.
 
@@ -492,8 +437,8 @@ class GaussianMixture(BaseMixture):
     weights_ : array-like, shape (n_components,)
         The weights of each mixture components.
 
-    means_ : array-like, shape (n_components, n_features)
-        The mean of each mixture component.
+    means_ : array-like, shape (n_vertices, n_features)
+        The mean of each mixture vertex.
 
     covariances_ : array-like
         The covariance of each mixture component.
@@ -543,28 +488,31 @@ class GaussianMixture(BaseMixture):
 
     See Also
     --------
-    BayesianGaussianMixture : Gaussian mixture model fit with a variational
-        inference.
+    GaussianMixture : Gaussian mixture model fit with a discrete set of
+        components.
     """
 
-    def __init__(self, n_components=1, covariance_type='full', tol=1e-3,
+    def __init__(self, simplicial_complex, n_vertices, covariance_type='full', tol=1e-3,
                  reg_covar=1e-6, max_iter=100, n_init=1, init_params='kmeans',
                  weights_init=None, means_init=None, precisions_init=None,
                  random_state=None, warm_start=False,
                  verbose=0, verbose_interval=10):
+        n_components = len(simplicial_complex)
         super(GaussianMixture, self).__init__(
             n_components=n_components, tol=tol, reg_covar=reg_covar,
             max_iter=max_iter, n_init=n_init, init_params=init_params,
             random_state=random_state, warm_start=warm_start,
             verbose=verbose, verbose_interval=verbose_interval)
 
+        self.simplicial_complex = simplicial_complex
+        self.n_vertices = n_vertices
         self.covariance_type = covariance_type
         self.weights_init = weights_init
         self.means_init = means_init
         self.precisions_init = precisions_init
 
     def _check_parameters(self, X):
-        """Check the Gaussian mixture parameters are well defined."""
+        """Check the simplicial Gaussian mixture parameters are well defined."""
         _, n_features = X.shape
         if self.covariance_type not in ['spherical', 'tied', 'diag', 'full']:
             raise ValueError("Invalid value for 'covariance_type': %s "
@@ -578,7 +526,7 @@ class GaussianMixture(BaseMixture):
 
         if self.means_init is not None:
             self.means_init = _check_means(self.means_init,
-                                           self.n_components, n_features)
+                                           self.n_vertices, n_features)
 
         if self.precisions_init is not None:
             self.precisions_init = _check_precisions(self.precisions_init,
@@ -684,7 +632,7 @@ class GaussianMixture(BaseMixture):
             cov_params = n_features * (n_features + 1) / 2.
         elif self.covariance_type == 'spherical':
             cov_params = self.n_components
-        mean_params = n_features * self.n_components
+        mean_params = n_features * self.n_vertices
         return int(cov_params + mean_params + self.n_components - 1)
 
     def bic(self, X):

@@ -1,6 +1,7 @@
-"""Base class for mixture models."""
+"""Base class for simplicial mixture models."""
 
-# Author: Wei Xue <xuewei4d@gmail.com>
+# Author: James Griffin <james.griffin@cantab.net>
+# Adapted from code by Wei Xue <xuewei4d@gmail.com>, which was,
 # Modified by Thierry Guillemot <thierry.guillemot.work@gmail.com>
 # License: BSD 3 clause
 
@@ -19,61 +20,34 @@ from ..externals import six
 from ..exceptions import ConvergenceWarning
 from ..utils import check_array, check_random_state
 from ..utils.fixes import logsumexp
+from .base import _check_shape, _check_X
 
-
-def _check_shape(param, param_shape, name):
-    """Validate the shape of the input parameter 'param'.
-
-    Parameters
-    ----------
-    param : array
-
-    param_shape : tuple
-
-    name : string
+def _check_simplices(set_simplices, n_vertices):
+    """This checks that the set of simplices is contained in the power set
+    of [0, ..., n_vertices-1].
     """
-    param = np.array(param)
-    if param.shape != param_shape:
-        raise ValueError("The parameter '%s' should have the shape of %s, "
-                         "but got %s" % (name, param_shape, param.shape))
+    union = set()
+    for S in set_simplices:
+        union = union.union(S)
+    if not union.issubset(set(range(n_vertices))):
+        counter_example = union.difference(set(range(n_vertices))).pop()
+        raise ValueError("A simplex contains a value: %d, which is not in"
+                         "the vertex set {0, ..., n_vertices}"
+                         % counter_example)
 
+class BaseSimplicialMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
+    """Base class for simplicial mixture models.
 
-def _check_X(X, n_components=None, n_features=None):
-    """Check the input data X.
-
-    Parameters
-    ----------
-    X : array-like, shape (n_samples, n_features)
-
-    n_components : int
-
-    Returns
-    -------
-    X : array, shape (n_samples, n_features)
-    """
-    X = check_array(X, dtype=[np.float64, np.float32])
-    if n_components is not None and X.shape[0] < n_components:
-        raise ValueError('Expected n_samples >= n_components '
-                         'but got n_components = %d, n_samples = %d'
-                         % (n_components, X.shape[0]))
-    if n_features is not None and X.shape[1] != n_features:
-        raise ValueError("Expected the input data X have %d features, "
-                         "but got %d features"
-                         % (n_features, X.shape[1]))
-    return X
-
-
-class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
-    """Base class for mixture models.
-
-    This abstract class specifies an interface for all mixture classes and
-    provides basic common methods for mixture models.
+    This abstract class specifies an interface for all simplicial mixture
+    classes and provides basic common methods for simplicial mixture models.
     """
 
-    def __init__(self, n_components, tol, reg_covar,
+    def __init__(self, n_vertices, set_simplices, tol, reg_covar,
                  max_iter, n_init, init_params, random_state, warm_start,
                  verbose, verbose_interval):
-        self.n_components = n_components
+        self.n_vertices = n_vertices
+        self.n_simplices = len(set_simplices)
+        self.set_simplices = set_simplices
         self.tol = tol
         self.reg_covar = reg_covar
         self.max_iter = max_iter
@@ -91,7 +65,7 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         ----------
         X : array-like, shape (n_samples, n_features)
         """
-        if self.n_components < 1:
+        if self.n_simplices < 1:
             raise ValueError("Invalid value for 'n_components': %d "
                              "Estimation requires at least one component"
                              % self.n_components)
@@ -116,6 +90,8 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
                              "regularization on covariance must be "
                              "non-negative"
                              % self.reg_covar)
+
+        _check_simplices(self.set_simplices, self.n_vertices)
 
         # Check all the parameters values of the derived class
         self._check_parameters(X)
@@ -143,12 +119,14 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         n_samples, _ = X.shape
 
         if self.init_params == 'kmeans':
-            resp = np.zeros((n_samples, self.n_components))
-            label = cluster.KMeans(n_clusters=self.n_components, n_init=1,
-                                   random_state=random_state).fit(X).labels_
-            resp[np.arange(n_samples), label] = 1
+            raise ValueError("It is not yet clear whether kmeans makes sense"
+                             "in a simplicial context")
+            #resp = np.zeros((n_samples, self.n_simplices))
+            #label = cluster.KMeans(n_clusters=self.n_simplices, n_init=1,
+            #                       random_state=random_state).fit(X).labels_
+            #resp[np.arange(n_samples), label] = 1
         elif self.init_params == 'random':
-            resp = random_state.rand(n_samples, self.n_components)
+            resp = random_state.rand(n_samples, self.n_simplices)
             resp /= resp.sum(axis=1)[:, np.newaxis]
         else:
             raise ValueError("Unimplemented initialization method '%s'"
@@ -187,7 +165,7 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
         -------
         self
         """
-        X = _check_X(X, self.n_components)
+        X = _check_X(X, self.n_simplices)
         self._check_initial_parameters(X)
 
         # if we enable warm_start, we will have a unique initialisation
@@ -210,8 +188,9 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
             for n_iter in range(self.max_iter):
                 prev_lower_bound = self.lower_bound_
 
-                log_prob_norm, log_resp = self._e_step(X)
-                self._m_step(X, log_resp)
+                log_prob_norm, estimated_values = self._e_step(X)
+                self._m_step(X, estimated_values)
+                log_resp = estimated_values[0]
                 self.lower_bound_ = self._compute_lower_bound(
                     log_resp, log_prob_norm)
 
@@ -241,6 +220,7 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
 
         return self
 
+    @abstractmethod
     def _e_step(self, X):
         """E step.
 
@@ -257,11 +237,12 @@ class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
             Logarithm of the posterior probabilities (or responsibilities) of
             the point of each sample in X.
         """
-        log_prob_norm, log_resp = self._estimate_log_prob_resp(X)
-        return np.mean(log_prob_norm), log_resp
+        #log_prob_norm, log_resp = self._estimate_log_prob_resp(X)
+        #return np.mean(log_prob_norm), log_resp
+        pass
 
     @abstractmethod
-    def _m_step(self, X, log_resp):
+    def _m_step(self, X, estimated_values):
         """M step.
 
         Parameters
