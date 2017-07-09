@@ -9,6 +9,9 @@ from .dpgmm import DPGMM, VBGMM
 
 from .gaussian_mixture import GaussianMixture
 from .bayesian_mixture import BayesianGaussianMixture
+from .simplicial_gaussian_mixture import GaussianSimplicialMixture
+from .simplices import Simplices
+from .simplicial_base import _random_from_simplex
 
 
 __all__ = ['DPGMM',
@@ -19,4 +22,6 @@ __all__ = ['DPGMM',
            'log_multivariate_normal_density',
            'sample_gaussian',
            'GaussianMixture',
-           'BayesianGaussianMixture']
+           'BayesianGaussianMixture',
+           'GaussianSimplicialMixture',
+           'Simplices']

@@ -22,18 +22,43 @@ from ..utils import check_array, check_random_state
 from ..utils.fixes import logsumexp
 from .base import _check_shape, _check_X
 
-def _check_simplices(set_simplices, n_vertices):
+def _check_simplices(simplices, n_vertices):
     """This checks that the set of simplices is contained in the power set
     of [0, ..., n_vertices-1].
     """
-    union = set()
-    for S in set_simplices:
-        union = union.union(S)
-    if not union.issubset(set(range(n_vertices))):
-        counter_example = union.difference(set(range(n_vertices))).pop()
-        raise ValueError("A simplex contains a value: %d, which is not in"
-                         "the vertex set {0, ..., n_vertices}"
-                         % counter_example)
+    vertices = set()
+    for S in simplices:
+        vertices = vertices.union(S)
+    if not vertices.issubset(set(range(n_vertices))):
+        counter_example = vertices.difference(set(range(n_vertices))).pop()
+        raise ValueError("A simplex contains a value: {}, which is not in "
+                         "the vertex set {{0, ..., {}}}".format(
+                         counter_example, n_vertices-1))
+        return 0
+    else:
+        return 1
+
+def _random_from_simplex(D=2, k=1):
+    """Returns an array of k random points from the D dimensional simplex
+    in R^{D+1}, drawn using the uniform distribution, unless k=1 in which
+    case it returns a single random point.
+    """
+    def _generate_point():
+        """Generate a single point"""
+        return np.diff(np.pad(
+                np.sort(np.random.random(D)), (1,1),
+                mode='constant', constant_values=(0,1)
+                ))
+    if k < 1:
+        raise ValueError("Must generate 1 or greater number of points.")
+    if k == 1:
+        return _generate_point()
+    else:
+        A = np.zeros(shape=(k, D+1), dtype=float)
+        for i in range(k):
+            A[i,:] = _generate_point()
+        return A
+
 
 class BaseSimplicialMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
     """Base class for simplicial mixture models.

@@ -10,7 +10,7 @@ import numpy as np
 from scipy import linalg
 
 from .base import _check_shape
-from .base_simplicial import BaseSimplicialMixture
+from .simplicial_base import BaseSimplicialMixture
 from .gaussian_mixture import _check_weights, _check_precisions
 # _check_precision_positivity, _check_precision_matrix, _check_precisions_full
 from ..externals.six.moves import zip
@@ -54,24 +54,24 @@ def _estimate_gaussian_covariances_full(resp, X, nk, means, reg_covar):
 
     Parameters
     ----------
-    resp : array-like, shape (n_samples, n_components)
+    resp : array-like, shape (n_samples, n_simplices)
 
     X : array-like, shape (n_samples, n_features)
 
-    nk : array-like, shape (n_components,)
+    nk : array-like, shape (n_simplices,)
 
-    means : array-like, shape (n_components, n_features)
+    means : array-like, shape (n_simplices, n_features)
 
     reg_covar : float
 
     Returns
     -------
-    covariances : array, shape (n_components, n_features, n_features)
+    covariances : array, shape (n_simplices, n_features, n_features)
         The covariance matrix of the current components.
     """
     n_components, n_features = means.shape
-    covariances = np.empty((n_components, n_features, n_features))
-    for k in range(n_components):
+    covariances = np.empty((n_simplices, n_features, n_features))
+    for k in range(n_simplices):
         diff = X - means[k]
         covariances[k] = np.dot(resp[:, k] * diff.T, diff) / nk[k]
         covariances[k].flat[::n_features + 1] += reg_covar
@@ -83,13 +83,13 @@ def _estimate_gaussian_covariances_tied(resp, X, nk, means, reg_covar):
 
     Parameters
     ----------
-    resp : array-like, shape (n_samples, n_components)
+    resp : array-like, shape (n_samples, n_simplices)
 
     X : array-like, shape (n_samples, n_features)
 
-    nk : array-like, shape (n_components,)
+    nk : array-like, shape (n_simplices,)
 
-    means : array-like, shape (n_components, n_features)
+    means : array-like, shape (n_simplices, n_features)
 
     reg_covar : float
 
@@ -111,19 +111,19 @@ def _estimate_gaussian_covariances_diag(resp, X, nk, means, reg_covar):
 
     Parameters
     ----------
-    responsibilities : array-like, shape (n_samples, n_components)
+    responsibilities : array-like, shape (n_samples, n_simplices)
 
     X : array-like, shape (n_samples, n_features)
 
-    nk : array-like, shape (n_components,)
+    nk : array-like, shape (n_simplices,)
 
-    means : array-like, shape (n_components, n_features)
+    means : array-like, shape (n_simplices, n_features)
 
     reg_covar : float
 
     Returns
     -------
-    covariances : array, shape (n_components, n_features)
+    covariances : array, shape (n_simplices, n_features)
         The covariance vector of the current components.
     """
     avg_X2 = np.dot(resp.T, X * X) / nk[:, np.newaxis]
@@ -137,19 +137,19 @@ def _estimate_gaussian_covariances_spherical(resp, X, nk, means, reg_covar):
 
     Parameters
     ----------
-    responsibilities : array-like, shape (n_samples, n_components)
+    responsibilities : array-like, shape (n_samples, n_simplices)
 
     X : array-like, shape (n_samples, n_features)
 
-    nk : array-like, shape (n_components,)
+    nk : array-like, shape (n_simplices,)
 
-    means : array-like, shape (n_components, n_features)
+    means : array-like, shape (n_simplices, n_features)
 
     reg_covar : float
 
     Returns
     -------
-    variances : array, shape (n_components,)
+    variances : array, shape (n_simplices,)
         The variance values of each components.
     """
     return _estimate_gaussian_covariances_diag(resp, X, nk,
@@ -164,7 +164,7 @@ def _estimate_gaussian_parameters(X, resp, reg_covar, covariance_type):
     X : array-like, shape (n_samples, n_features)
         The input data array.
 
-    resp : array-like, shape (n_samples, n_components)
+    resp : array-like, shape (n_samples, n_simplices)
         The responsibilities for each data sample in X.
 
     reg_covar : float
@@ -175,10 +175,10 @@ def _estimate_gaussian_parameters(X, resp, reg_covar, covariance_type):
 
     Returns
     -------
-    nk : array-like, shape (n_components,)
+    nk : array-like, shape (n_simplices,)
         The numbers of data samples in the current components.
 
-    means : array-like, shape (n_components, n_features)
+    means : array-like, shape (n_vertices, n_features)
         The centers of the current components.
 
     covariances : array-like
@@ -220,8 +220,8 @@ def _compute_precision_cholesky(covariances, covariance_type):
         "or increase reg_covar.")
 
     if covariance_type in 'full':
-        n_components, n_features, _ = covariances.shape
-        precisions_chol = np.empty((n_components, n_features, n_features))
+        n_simplices, n_features, _ = covariances.shape
+        precisions_chol = np.empty((n_simplices, n_features, n_features))
         for k, covariance in enumerate(covariances):
             try:
                 cov_chol = linalg.cholesky(covariance, lower=True)
@@ -254,10 +254,10 @@ def _compute_log_det_cholesky(matrix_chol, covariance_type, n_features):
     ----------
     matrix_chol : array-like,
         Cholesky decompositions of the matrices.
-        'full' : shape of (n_components, n_features, n_features)
+        'full' : shape of (n_simplices, n_features, n_features)
         'tied' : shape of (n_features, n_features)
-        'diag' : shape of (n_components, n_features)
-        'spherical' : shape of (n_components,)
+        'diag' : shape of (n_simplices, n_features)
+        'spherical' : shape of (n_simplices,)
 
     covariance_type : {'full', 'tied', 'diag', 'spherical'}
 
@@ -266,14 +266,14 @@ def _compute_log_det_cholesky(matrix_chol, covariance_type, n_features):
 
     Returns
     -------
-    log_det_precision_chol : array-like, shape (n_components,)
+    log_det_precision_chol : array-like, shape (n_simplices,)
         The determinant of the precision matrix for each component.
     """
     if covariance_type == 'full':
-        n_components, _, _ = matrix_chol.shape
+        n_simplices, _, _ = matrix_chol.shape
         log_det_chol = (np.sum(np.log(
             matrix_chol.reshape(
-                n_components, -1)[:, ::n_features + 1]), 1))
+                n_simplices, -1)[:, ::n_features + 1]), 1))
 
     elif covariance_type == 'tied':
         log_det_chol = (np.sum(np.log(np.diag(matrix_chol))))
@@ -294,20 +294,20 @@ def _estimate_log_gaussian_prob(X, means, precisions_chol, covariance_type):
     ----------
     X : array-like, shape (n_samples, n_features)
 
-    means : array-like, shape (n_components, n_features)
+    means : array-like, shape (n_simplices, n_features)
 
     precisions_chol : array-like,
         Cholesky decompositions of the precision matrices.
-        'full' : shape of (n_components, n_features, n_features)
+        'full' : shape of (n_simplices, n_features, n_features)
         'tied' : shape of (n_features, n_features)
-        'diag' : shape of (n_components, n_features)
-        'spherical' : shape of (n_components,)
+        'diag' : shape of (n_simplices, n_features)
+        'spherical' : shape of (n_simplices,)
 
     covariance_type : {'full', 'tied', 'diag', 'spherical'}
 
     Returns
     -------
-    log_prob : array, shape (n_samples, n_components)
+    log_prob : array, shape (n_samples, n_simplices)
     """
     n_samples, n_features = X.shape
     n_components, _ = means.shape
@@ -316,13 +316,13 @@ def _estimate_log_gaussian_prob(X, means, precisions_chol, covariance_type):
         precisions_chol, covariance_type, n_features)
 
     if covariance_type == 'full':
-        log_prob = np.empty((n_samples, n_components))
+        log_prob = np.empty((n_samples, n_simplices))
         for k, (mu, prec_chol) in enumerate(zip(means, precisions_chol)):
             y = np.dot(X, prec_chol) - np.dot(mu, prec_chol)
             log_prob[:, k] = np.sum(np.square(y), axis=1)
 
     elif covariance_type == 'tied':
-        log_prob = np.empty((n_samples, n_components))
+        log_prob = np.empty((n_samples, n_simplices))
         for k, mu in enumerate(means):
             y = np.dot(X, precisions_chol) - np.dot(mu, precisions_chol)
             log_prob[:, k] = np.sum(np.square(y), axis=1)
@@ -341,12 +341,12 @@ def _estimate_log_gaussian_prob(X, means, precisions_chol, covariance_type):
     return -.5 * (n_features * np.log(2 * np.pi) + log_prob) + log_det
 
 
-class SimplicialGaussianMixture(BaseMixture):
-    """Simplicial Gaussian Mixture.
+class GaussianSimplicialMixture(BaseSimplicialMixture):
+    """Gaussian Simplicial Mixture.
 
-    Representation of a simplicial Gaussian mixture model probability
+    Representation of a Gaussian simplicial mixture model probability
     distribution.
-    This class allows to estimate the parameters of a simplicial Gaussian
+    This class allows to estimate the parameters of a Gaussian 1simplicial
     mixture distribution.
 
     Read more in the :ref:`User Guide <gmm>`.
@@ -356,7 +356,7 @@ class SimplicialGaussianMixture(BaseMixture):
     Parameters
     ----------
 
-    similicial_complex : a subset of the power set of {1, ..., n_vertices}
+    simplicial_complex : a subset of the power set of {1, ..., n_vertices}
 
     n_vertices : int
         The number of vertices of the simplicial complex
@@ -393,7 +393,7 @@ class SimplicialGaussianMixture(BaseMixture):
             'kmeans' : responsibilities are initialized using kmeans.
             'random' : responsibilities are initialized randomly.
 
-    weights_init : array-like, shape (n_components, ), optional
+    weights_init : array-like, shape (n_simplices, ), optional
         The user-provided initial weights, defaults to None.
         If it None, weights are initialized using the `init_params` method.
 
@@ -407,10 +407,10 @@ class SimplicialGaussianMixture(BaseMixture):
         If it None, precisions are initialized using the 'init_params' method.
         The shape depends on 'covariance_type'::
 
-            (n_components,)                        if 'spherical',
+            (n_simplices,)                        if 'spherical',
             (n_features, n_features)               if 'tied',
-            (n_components, n_features)             if 'diag',
-            (n_components, n_features, n_features) if 'full'
+            (n_simplices, n_features)             if 'diag',
+            (n_simplices, n_features, n_features) if 'full'
 
     random_state : int, RandomState instance or None, optional (default=None)
         If int, random_state is the seed used by the random number generator;
@@ -434,34 +434,34 @@ class SimplicialGaussianMixture(BaseMixture):
 
     Attributes
     ----------
-    weights_ : array-like, shape (n_components,)
-        The weights of each mixture components.
+    weights_ : array-like, shape (n_simplices,)
+        The weight of each mixture simplex component.
 
     means_ : array-like, shape (n_vertices, n_features)
         The mean of each mixture vertex.
 
     covariances_ : array-like
-        The covariance of each mixture component.
+        The covariance of each mixture simplex component.
         The shape depends on `covariance_type`::
 
-            (n_components,)                        if 'spherical',
+            (n_simplices,)                        if 'spherical',
             (n_features, n_features)               if 'tied',
-            (n_components, n_features)             if 'diag',
-            (n_components, n_features, n_features) if 'full'
+            (n_simplices, n_features)             if 'diag',
+            (n_simplices, n_features, n_features) if 'full'
 
     precisions_ : array-like
-        The precision matrices for each component in the mixture. A precision
-        matrix is the inverse of a covariance matrix. A covariance matrix is
-        symmetric positive definite so the mixture of Gaussian can be
+        The precision matrices for each simplex component in the mixture. A
+        precision matrix is the inverse of a covariance matrix. A covariance
+        matrix is symmetric positive definite so the mixture of Gaussian can be
         equivalently parameterized by the precision matrices. Storing the
         precision matrices instead of the covariance matrices makes it more
         efficient to compute the log-likelihood of new samples at test time.
         The shape depends on `covariance_type`::
 
-            (n_components,)                        if 'spherical',
+            (n_simplices,)                        if 'spherical',
             (n_features, n_features)               if 'tied',
-            (n_components, n_features)             if 'diag',
-            (n_components, n_features, n_features) if 'full'
+            (n_simplices, n_features)             if 'diag',
+            (n_simplices, n_features, n_features) if 'full'
 
     precisions_cholesky_ : array-like
         The cholesky decomposition of the precision matrices of each mixture
@@ -472,10 +472,10 @@ class SimplicialGaussianMixture(BaseMixture):
         it more efficient to compute the log-likelihood of new samples at test
         time. The shape depends on `covariance_type`::
 
-            (n_components,)                        if 'spherical',
+            (n_simplices,)                        if 'spherical',
             (n_features, n_features)               if 'tied',
-            (n_components, n_features)             if 'diag',
-            (n_components, n_features, n_features) if 'full'
+            (n_simplices, n_features)             if 'diag',
+            (n_simplices, n_features, n_features) if 'full'
 
     converged_ : bool
         True when convergence was reached in fit(), False otherwise.
@@ -497,15 +497,13 @@ class SimplicialGaussianMixture(BaseMixture):
                  weights_init=None, means_init=None, precisions_init=None,
                  random_state=None, warm_start=False,
                  verbose=0, verbose_interval=10):
-        n_components = len(simplicial_complex)
-        super(GaussianMixture, self).__init__(
-            n_components=n_components, tol=tol, reg_covar=reg_covar,
+        super(SimplicialGaussianMixture, self).__init__(
+            simplicial_complex=simplicial_complex, n_vertices=n_vertices,
+            tol=tol, reg_covar=reg_covar,
             max_iter=max_iter, n_init=n_init, init_params=init_params,
             random_state=random_state, warm_start=warm_start,
             verbose=verbose, verbose_interval=verbose_interval)
 
-        self.simplicial_complex = simplicial_complex
-        self.n_vertices = n_vertices
         self.covariance_type = covariance_type
         self.weights_init = weights_init
         self.means_init = means_init
@@ -522,7 +520,7 @@ class SimplicialGaussianMixture(BaseMixture):
 
         if self.weights_init is not None:
             self.weights_init = _check_weights(self.weights_init,
-                                               self.n_components)
+                                               self.n_simplices)
 
         if self.means_init is not None:
             self.means_init = _check_means(self.means_init,
@@ -531,17 +529,17 @@ class SimplicialGaussianMixture(BaseMixture):
         if self.precisions_init is not None:
             self.precisions_init = _check_precisions(self.precisions_init,
                                                      self.covariance_type,
-                                                     self.n_components,
+                                                     self.n_simplices,
                                                      n_features)
 
     def _initialize(self, X, resp):
-        """Initialization of the Gaussian mixture parameters.
+        """Initialization of the Gaussian simplicial mixture parameters.
 
         Parameters
         ----------
         X : array-like, shape (n_samples, n_features)
 
-        resp : array-like, shape (n_samples, n_components)
+        resp : array-like, shape (n_samples, n_simplices)
         """
         n_samples, _ = X.shape
 
@@ -574,7 +572,7 @@ class SimplicialGaussianMixture(BaseMixture):
         ----------
         X : array-like, shape (n_samples, n_features)
 
-        log_resp : array-like, shape (n_samples, n_components)
+        log_resp : array-like, shape (n_samples, n_simplices)
             Logarithm of the posterior probabilities (or responsibilities) of
             the point of each sample in X.
         """
@@ -625,15 +623,15 @@ class SimplicialGaussianMixture(BaseMixture):
         """Return the number of free parameters in the model."""
         _, n_features = self.means_.shape
         if self.covariance_type == 'full':
-            cov_params = self.n_components * n_features * (n_features + 1) / 2.
+            cov_params = self.n_simplices * n_features * (n_features + 1) / 2.
         elif self.covariance_type == 'diag':
-            cov_params = self.n_components * n_features
+            cov_params = self.n_simplices * n_features
         elif self.covariance_type == 'tied':
             cov_params = n_features * (n_features + 1) / 2.
         elif self.covariance_type == 'spherical':
-            cov_params = self.n_components
+            cov_params = self.n_simplices
         mean_params = n_features * self.n_vertices
-        return int(cov_params + mean_params + self.n_components - 1)
+        return int(cov_params + mean_params + self.n_simplices - 1)
 
     def bic(self, X):
         """Bayesian information criterion for the current model on the input X.
