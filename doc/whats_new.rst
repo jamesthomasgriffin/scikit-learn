@@ -31,6 +31,19 @@ Changelog
 New features
 ............
 
+   - :class:`model_selection.GridSearchCV` and
+     :class:`model_selection.RandomizedSearchCV` now support simultaneous
+     evaluation of multiple metrics. Refer to the
+     :ref:`multimetric_grid_search` section of the user guide for more
+     information. :issue:`7388` by `Raghav RV`_
+
+   - Added the :func:`model_selection.cross_validate` which allows evaluation
+     of multiple metrics. This function returns a dict with more useful
+     information from cross-validation such as the train scores, fit times and
+     score times.
+     Refer to :ref:`multimetric_cross_validation` section of the userguide
+     for more information. :issue:`7388` by `Raghav RV`_
+     
    - Added :class:`multioutput.ClassifierChain` for multi-label
      classification. By `Adam Kleczewski <adamklec>`_.
 
@@ -448,7 +461,22 @@ Bug fixes
      in :class:`decomposition.PCA`,
      :class:`decomposition.RandomizedPCA` and
      :class:`decomposition.IncrementalPCA`.
-     :issue:`9105` by `Hanmin Qin <https://github.com/qinhanmin2014>`_. 
+     :issue:`9105` by `Hanmin Qin <https://github.com/qinhanmin2014>`_.
+
+   - Fix :class:`semi_supervised.BaseLabelPropagation` to correctly implement
+     ``LabelPropagation`` and ``LabelSpreading`` as done in the referenced
+     papers. :class:`semi_supervised.LabelPropagation` now always does hard
+     clamping. Its ``alpha`` parameter has no effect and is
+     deprecated to be removed in 0.21. :issue:`6727` :issue:`3550` issue:`5770`
+     by :user:`Andre Ambrosio Boechat <boechat107>`, :user:`Utkarsh Upadhyay
+     <musically-ut>`, and `Joel Nothman`_.
+
+   - Add ``data_home`` parameter to
+     :func:`sklearn.datasets.fetch_kddcup99` by `Loic Esteve`_.
+
+   - Fix inconsistent results between :class:`linear_model.RidgeCV`
+     and :class:`linear_model.Ridge` when using ``normalize=True``
+     by `Alexandre Gramfort`_.
 
 API changes summary
 -------------------
