@@ -10,8 +10,8 @@ from .dpgmm import DPGMM, VBGMM
 from .gaussian_mixture import GaussianMixture
 from .bayesian_mixture import BayesianGaussianMixture
 from .simplicial_gaussian_mixture import GaussianSimplicialMixture
-from .simplices import Simplices
-from .simplicial_base import _random_from_simplex
+from .simplices import Simplices, SimplicesRV, _random_from_simplex, complete_simplices, grid_simplices
+#from .simplicial_base import
 
 
 __all__ = ['DPGMM',
@@ -24,4 +24,8 @@ __all__ = ['DPGMM',
            'GaussianMixture',
            'BayesianGaussianMixture',
            'GaussianSimplicialMixture',
-           'Simplices']
+           '_random_from_simplex',
+           'complete_simplices',
+           'grid_simplices',
+           'Simplices',
+           'SimplicesRV']

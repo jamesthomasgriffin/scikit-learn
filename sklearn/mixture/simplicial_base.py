@@ -22,43 +22,6 @@ from ..utils import check_array, check_random_state
 from ..utils.fixes import logsumexp
 from .base import _check_shape, _check_X
 
-def _check_simplices(simplices, n_vertices):
-    """This checks that the set of simplices is contained in the power set
-    of [0, ..., n_vertices-1].
-    """
-    vertices = set()
-    for S in simplices:
-        vertices = vertices.union(S)
-    if not vertices.issubset(set(range(n_vertices))):
-        counter_example = vertices.difference(set(range(n_vertices))).pop()
-        raise ValueError("A simplex contains a value: {}, which is not in "
-                         "the vertex set {{0, ..., {}}}".format(
-                         counter_example, n_vertices-1))
-        return 0
-    else:
-        return 1
-
-def _random_from_simplex(D=2, k=1):
-    """Returns an array of k random points from the D dimensional simplex
-    in R^{D+1}, drawn using the uniform distribution, unless k=1 in which
-    case it returns a single random point.
-    """
-    def _generate_point():
-        """Generate a single point"""
-        return np.diff(np.pad(
-                np.sort(np.random.random(D)), (1,1),
-                mode='constant', constant_values=(0,1)
-                ))
-    if k < 1:
-        raise ValueError("Must generate 1 or greater number of points.")
-    if k == 1:
-        return _generate_point()
-    else:
-        A = np.zeros(shape=(k, D+1), dtype=float)
-        for i in range(k):
-            A[i,:] = _generate_point()
-        return A
-
 
 class BaseSimplicialMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
     """Base class for simplicial mixture models.
@@ -67,12 +30,12 @@ class BaseSimplicialMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstima
     classes and provides basic common methods for simplicial mixture models.
     """
 
-    def __init__(self, n_vertices, set_simplices, tol, reg_covar,
+    def __init__(self, A, tol, reg_covar,
                  max_iter, n_init, init_params, random_state, warm_start,
                  verbose, verbose_interval):
-        self.n_vertices = n_vertices
-        self.n_simplices = len(set_simplices)
-        self.set_simplices = set_simplices
+        self.n_vertices = A.n_vertices
+        self.n_simplices = A.n_simplices
+        self.simplices = A
         self.tol = tol
         self.reg_covar = reg_covar
         self.max_iter = max_iter
@@ -115,8 +78,6 @@ class BaseSimplicialMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstima
                              "regularization on covariance must be "
                              "non-negative"
                              % self.reg_covar)
-
-        _check_simplices(self.set_simplices, self.n_vertices)
 
         # Check all the parameters values of the derived class
         self._check_parameters(X)
